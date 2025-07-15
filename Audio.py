@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 
 class Audio:
 
-    def load_audio(self, filename):
+    def load_audio(self, file_name):
         # Read-only mode
-        audio = wave.open(filename, 'rb')
+        audio = wave.open(file_name, 'rb')
 
         # Valid wav file if it's mono, not stereo
         if audio.getnchannels() != 1:
@@ -37,9 +37,9 @@ class Audio:
 
     def _plot_mel_spectrogram(self, mel_spectrogram): # Plot the Mel spectrogram using librosa's display module
         plt.figure(figsize=(10, 4))
-        librosa.display.specshow(mel_spectrogram, x_axis='time', y_axis='mel', cmap='coolwarm')
-        plt.colorbar(format='%+2.0f dB')
-        plt.title('Mel Spectrogram')
+        librosa.display.specshow(mel_spectrogram)
+        # plt.colorbar(format='%+2.0f dB')
+        # plt.title('Mel Spectrogram')
         plt.tight_layout()
 
     def plot_spectrogram(self, mel_spectrogram):
@@ -51,3 +51,4 @@ class Audio:
         plt.savefig(filename)
         plt.close()
         return filename
+    

@@ -1,7 +1,9 @@
 from Audio import Audio
+from DatasetManager import DatasetManager
 
 def main():
     audio_instance = Audio()
+    dataset_mgr_instance = DatasetManager()
 
     try:
         audio = audio_instance.load_audio("example.wav")
@@ -34,6 +36,15 @@ def main():
         print(f"Mel spectrogram saved as {saved_filename}.")
     except Exception as e:
         print(f"Error saving mel spectrogram: {e}")
+
+    try:
+        img = dataset_mgr_instance.normalize_image("mel_spectrogram.png")
+        print("Image normalized successfully.")
+        dataset_mgr_instance.save_image(img, "normalized_image.png")
+        print("Image saved successfully.")
+    except FileNotFoundError:
+        print("Image file not found.")
+
     
 if __name__ == "__main__":
     main()
