@@ -2,6 +2,8 @@ import numpy as np
 import librosa
 import librosa.display
 import matplotlib.pyplot as plt
+from PIL import Image
+import io
 
 class Audio:
 
@@ -27,9 +29,7 @@ class Audio:
 
         # Compute the Mel spectrogram
         mel_spectr = librosa.feature.melspectrogram(y=y, sr=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels)
-
-        # Convert to decibel units
-        mel_spectr_db = librosa.power_to_db(mel_spectr, ref=np.max, top_db=80)
+        mel_spectr_db = librosa.power_to_db(mel_spectr, ref=np.max, top_db=80) # Convert to decibel units
 
         return mel_spectr_db
 
@@ -41,14 +41,16 @@ class Audio:
         librosa.display.specshow(mel_spectrogram, sr=sr, cmap='magma', ax=ax)
         return fig
 
-    def plot_spectrogram(self, y, sr):
+    def get_spectrogram_as_image(self, y, sr):
         mel_spectrogram = self.compute_mel_spectrogram(y, sr)
-        self._plot_mel_spectrogram(mel_spectrogram, sr)
-        plt.show()
+        fig = self._plot_mel_spectrogram(mel_spectrogram, sr)
 
-    def save_spectrogram(self, y, sr, filename):
-        mel_spectrogram = self.compute_mel_spectrogram(y, sr)
-        fig = self._plot_mel_spectrogram(mel_spectrogram, sr)        
-        fig.savefig(filename, dpi=100, pad_inches=0)
-        plt.close(fig)
-        return filename
+        # Save the figure to an in-memory buffer
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=100, pad_inches=0)
+        plt.close(fig)  # Close the figure to free up memory
+        buf.seek(0)  # Go to the beginning of the buffer
+
+        # Open the buffer as a PIL Image and return it
+        img = Image.open(buf)
+        return img
