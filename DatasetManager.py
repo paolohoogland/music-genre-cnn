@@ -1,7 +1,7 @@
 from PIL import Image
 
 class DatasetManager:
-    def normalize_image(self, image_path, size=(256, 256)):
+    def normalize_image(self, image_path, size=(256, 128)):
         img = Image.open(image_path)
         return img.resize(size)
 

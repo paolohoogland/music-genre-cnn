@@ -1,4 +1,3 @@
-import wave
 import numpy as np
 import librosa
 import librosa.display
@@ -8,47 +7,48 @@ class Audio:
 
     def load_audio(self, file_name):
         # Read-only mode
-        audio = wave.open(file_name, 'rb')
+        y, sr = librosa.load(file_name, sr=None, mono=True)
 
-        # Valid wav file if it's mono, not stereo
-        if audio.getnchannels() != 1:
-            raise ValueError("Audio file must be mono (1 channel)")
-
-        return audio
-    
-    def compute_mel_spectrogram(self, audio, sample_rate):
+        # Valid file if it's mono, not stereo
+        if y.ndim != 1:
+            raise ValueError("Audio file must be mono (single channel)")
+        
         # Ensure the audio is in the correct format
-        if sample_rate <= 0:
+        if sr <= 0:
             raise ValueError("Sample rate must be a positive integer")
-
-        audio_data = audio.readframes(audio.getnframes())
-        audio.close()
-
-        # 16-bit PCM audio data for librosa lib
-        audio_data = np.frombuffer(audio_data, dtype=np.int16)
-        normalized_audio_data = audio_data / np.max(np.abs(audio_data))
+        
+        return y, sr
+    
+    def compute_mel_spectrogram(self, y, sr):
+        # Parameters for the Mel spectrogram
+        n_fft = 2048
+        hop_length = 512
+        n_mels = 128
 
         # Compute the Mel spectrogram
-        mel_spectr = librosa.feature.melspectrogram(y=normalized_audio_data, sr=sample_rate, n_mels=128)
+        mel_spectr = librosa.feature.melspectrogram(y=y, sr=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels)
+
         # Convert to decibel units
-        mel_spectr = librosa.power_to_db(mel_spectr, ref=np.max)
+        mel_spectr_db = librosa.power_to_db(mel_spectr, ref=np.max, top_db=80)
 
-        return mel_spectr
+        return mel_spectr_db
 
-    def _plot_mel_spectrogram(self, mel_spectrogram): # Plot the Mel spectrogram using librosa's display module
-        plt.figure(figsize=(10, 4))
-        librosa.display.specshow(mel_spectrogram)
-        # plt.colorbar(format='%+2.0f dB')
-        # plt.title('Mel Spectrogram')
-        plt.tight_layout()
+    def _plot_mel_spectrogram(self, mel_spectrogram, sr): # Plot the Mel spectrogram using librosa's display module
+        fig = plt.figure(figsize=(12, 4))
+        ax = plt.Axes(fig, [0., 0., 1., 1.])
+        ax.set_axis_off()
+        fig.add_axes(ax)
+        librosa.display.specshow(mel_spectrogram, sr=sr, cmap='magma', ax=ax)
+        return fig
 
-    def plot_spectrogram(self, mel_spectrogram):
-        self._plot_mel_spectrogram(mel_spectrogram)
+    def plot_spectrogram(self, y, sr):
+        mel_spectrogram = self.compute_mel_spectrogram(y, sr)
+        self._plot_mel_spectrogram(mel_spectrogram, sr)
         plt.show()
 
-    def save_spectrogram(self, mel_spectrogram, filename):
-        self._plot_mel_spectrogram(mel_spectrogram)
-        plt.savefig(filename)
-        plt.close()
+    def save_spectrogram(self, y, sr, filename):
+        mel_spectrogram = self.compute_mel_spectrogram(y, sr)
+        fig = self._plot_mel_spectrogram(mel_spectrogram, sr)        
+        fig.savefig(filename, dpi=100, pad_inches=0)
+        plt.close(fig)
         return filename
-    
