@@ -1,37 +1,63 @@
-from Audio import Audio
+from torchvision import transforms
+from torch.utils.data import DataLoader
+
 from DatasetManager import DatasetManager
+from SpectrogramDataset import SpectrogramDataset
+from CNN import CNN
 
 def main():
-    audio_instance = Audio()
     dataset_mgr_instance = DatasetManager()
 
     try:
-        y, sr = audio_instance.load_audio("example.wav")
-        print("Audio loaded successfully.")
-    except ValueError as e:
-        print(f"Error loading audio: {e}")
-        return
-    except FileNotFoundError:
-        print("Audio file not found.")
-        return
+        all_genres = dataset_mgr_instance.get_genre_list()
+        num_genres = len(all_genres)
+        genre_to_index = {genre: i for i, genre in enumerate(all_genres)} # Dictionary (genre_name: index)
+
+        print("Genre list created successfully.")
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        return
+        print(f"Error creating genre list: {e}")
 
     try:
-        saved_filename = audio_instance.save_spectrogram(y, sr, "mel_spectrogram.png")
-        print(f"Mel spectrogram saved as {saved_filename}.")
+        train_set, val_set, test_set = dataset_mgr_instance.create_sets()
+        print("Data sets created successfully.")
     except Exception as e:
-        print(f"Error saving mel spectrogram: {e}")
+        print(f"Error creating data sets: {e}")
 
     try:
-        img = dataset_mgr_instance.normalize_image("mel_spectrogram.png")
-        print("Image normalized successfully.")
-        dataset_mgr_instance.save_image(img, "normalized_image.png")
-        print("Image saved successfully.")
-    except FileNotFoundError:
-        print("Image file not found.")
+        data_transform = transforms.Compose([
+            transforms.Grayscale(num_output_channels=1),
+            transforms.Resize((CNN.IMG_HEIGHT, CNN.IMG_WIDTH)),
+            transforms.ToTensor()
+        ])
+        print("Data transform created successfully.")
+    except Exception as e:
+        print(f"Error creating data transform: {e}")
 
-    
+    try:
+        train_dataset = SpectrogramDataset(train_set, genre_to_index, data_transform)
+        val_dataset = SpectrogramDataset(val_set, genre_to_index, data_transform)
+        # test_dataset = SpectrogramDataset(test_set, genre_to_index, data_transform)
+
+        print("Spectrogram datasets created successfully.")
+    except Exception as e:
+        print(f"Error creating spectrogram datasets: {e}")
+
+    try:
+        train_dataloader = DataLoader(train_dataset, batch_size=CNN.BATCH_SIZE, shuffle=True)
+        val_dataloader = DataLoader(val_dataset, batch_size=CNN.BATCH_SIZE, shuffle=False)
+        # test_dataloader = DataLoader(test_dataset, batch_size=CNN.BATCH_SIZE, shuffle=False)
+        print("Data loaders created successfully.")
+    except Exception as e:
+        print(f"Error creating data loaders: {e}")
+
+    try:
+        model = CNN(num_genres=num_genres)
+        print("CNN model created successfully.")
+        print(model)
+    except Exception as e:
+        print(f"Error creating CNN model: {e}")
+
+    print("All components initialized successfully.")
+
 if __name__ == "__main__":
     main()
