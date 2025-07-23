@@ -10,18 +10,18 @@ class CNN(nn.Module):
         super(CNN, self).__init__()
 
         # Three convolutional layers
-        # Input channels: 1 (grayscale), Output channels: 32, 64, 128 respectively
+        # Input channels: 1 (grayscale), Output channels: 64, 128, 256 respectively
         # All three inside the self.features block for adaptability
         self.features = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(in_channels=1, out_channels=64, kernel_size=3, stride=1, padding=1),
             nn.ReLU(), # Activation function, introduces non-linearity
             nn.MaxPool2d(kernel_size=2, stride=2), # Downsampling the feature maps by 2
         
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),
         
-            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2)
         )

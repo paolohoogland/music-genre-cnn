@@ -6,3 +6,5 @@ Data/
 
 *.wav
 *.png
+
+most_precise_cnn.pth

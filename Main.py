@@ -66,6 +66,8 @@ def validate_one_epoch(model, dataloader, loss_fn, device):
 
 def main():
     dataset_mgr_instance = DatasetManager()
+    highest_val_acc = 0.0
+    model_save_path = "most_precise_cnn.pth"
 
     try:
         all_genres = dataset_mgr_instance.get_genre_list()
@@ -83,7 +85,15 @@ def main():
         print(f"Error creating data sets: {e}")
 
     try:
-        data_transform = transforms.Compose([
+        train_transform  = transforms.Compose([
+            transforms.Grayscale(num_output_channels=1),
+            transforms.Resize((CNN.IMG_HEIGHT, CNN.IMG_WIDTH)),
+            transforms.RandomHorizontalFlip(p=0.5),  # Randomly flip images horizontally to prevent overfitting
+            transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)), # Randomly translate and scale images
+            transforms.ToTensor()
+        ])
+
+        val_transform = transforms.Compose([
             transforms.Grayscale(num_output_channels=1),
             transforms.Resize((CNN.IMG_HEIGHT, CNN.IMG_WIDTH)),
             transforms.ToTensor()
@@ -93,8 +103,8 @@ def main():
         print(f"Error creating data transform: {e}")
 
     try:
-        train_dataset = SpectrogramDataset(train_set, genre_to_index, data_transform)
-        val_dataset = SpectrogramDataset(val_set, genre_to_index, data_transform)
+        train_dataset = SpectrogramDataset(train_set, genre_to_index, train_transform)
+        val_dataset = SpectrogramDataset(val_set, genre_to_index, val_transform)
         # test_dataset = SpectrogramDataset(test_set, genre_to_index, data_transform)
 
         print("Spectrogram datasets created successfully.")
@@ -121,16 +131,27 @@ def main():
 
     try:
         # Device setup using CUDA (GPU) if available, otherwise CPU
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"Using device: {device}")
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+            print(f"Using device: {device}")
+        else:
+            device = torch.device("cpu")
+            print(f"Using device: {device}")
         model.to(device)
     except Exception as e:
         print(f"Error setting up device: {e}")
 
     try:
-        loss_fn = torch.nn.CrossEntropyLoss() # Loss function
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.001) # Adam is a good optimizer
+        # Loss function
+        loss_fn = torch.nn.CrossEntropyLoss()
+
+        # Adam is a good optimizer
+        # Weight decay is used to prevent overfitting
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4) 
+
+        # Number of iterations (epochs) to train the model
         num_epochs = 50
+
         print("Loss function and optimizer set up successfully.")
     except Exception as e:
         print(f"Error setting up loss function and optimizer: {e}")
@@ -142,6 +163,11 @@ def main():
             val_loss, val_accuracy = validate_one_epoch(model, val_dataloader, loss_fn, device)
 
             print(f"Epoch {epoch + 1} completed: Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.4f}")
+
+            if val_accuracy > highest_val_acc:
+                highest_val_acc = val_accuracy
+                torch.save(model.state_dict(), model_save_path)
+                print(f"Model saved with accuracy: {highest_val_acc:.4f}")
     except Exception as e:
         print(f"Error during training: {e}")
 
