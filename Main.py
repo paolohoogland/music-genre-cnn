@@ -97,7 +97,7 @@ def main(args):
         train_transform  = transforms.Compose([
             transforms.Grayscale(num_output_channels=1),
             transforms.Resize((CNN.IMG_HEIGHT, CNN.IMG_WIDTH)),
-            transforms.RandomHorizontalFlip(p=0.5),  # Randomly flip images horizontally to prevent overfitting
+            # transforms.RandomHorizontalFlip(p=0.5),  # Randomly flip images horizontally to prevent overfitting
             # transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)), # Randomly translate and scale images
             transforms.ToTensor()
         ])
@@ -196,7 +196,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a CNN for Music Genre Classification")
 
-    parser.add_argument('--epochs', type=int, default=10, help='Number of epochs to train the model')
+    parser.add_argument('--epochs', type=int, default=50, help='Number of epochs to train the model')
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate for the optimizer')
     parser.add_argument('--weight_decay', type=float, default=0.0001, help='Weight decay for the optimizer')
     parser.add_argument('--batch_size', type=int, default=CNN.BATCH_SIZE, help='Batch size for training and validation')

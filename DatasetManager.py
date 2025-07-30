@@ -1,5 +1,6 @@
 import os
 import random
+from collections import defaultdict
 
 class DatasetManager:
     IMAGES_PATH = 'Data/images_original'
@@ -34,19 +35,34 @@ class DatasetManager:
     def create_sets(self):
         all_data = self.get_all_image_files()
 
-        random.seed(42) # For reproducibility (use of seed)
-        random.shuffle(all_data)
+        # Group files by genre
+        files_by_genre = defaultdict(list)
+        for path, genre in all_data:
+            files_by_genre[genre].append((path, genre))
 
-        num_files = len(all_data)
-        train_size = int(num_files * 0.7) # 70% for training
-        val_size = int(num_files * 0.15) # 15% for validation
-        # Remaining 15% for testing
+        train_set = []
+        val_set = []
+        test_set = []
+        
+        # Fixed seed
+        random.seed(42)
 
-        train_set = all_data[:train_size]
-        val_set = all_data[train_size:train_size + val_size]
-        test_set = all_data[train_size + val_size:]
+        for genre, files in files_by_genre.items():
+            random.shuffle(files)
+            
+            num_files_in_genre = len(files)
+            train_end = int(0.7 * num_files_in_genre)
+            val_end = train_end + int(0.15 * num_files_in_genre)
 
-        print(f"Total spectrograms: {num_files}")
+            train_set.extend(files[:train_end])
+            val_set.extend(files[train_end:val_end])
+            test_set.extend(files[val_end:])
+
+        random.shuffle(train_set)
+        random.shuffle(val_set)
+        random.shuffle(test_set)
+        
+        print(f"Total spectrograms: {len(all_data)}")
         print(f"Training set size: {len(train_set)} images")
         print(f"Validation set size: {len(val_set)} images")
         print(f"Test set size: {len(test_set)} images")
