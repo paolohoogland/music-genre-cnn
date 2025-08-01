@@ -4,7 +4,7 @@ import torch.nn as nn
 class CNN(nn.Module):
     IMG_HEIGHT = 128
     IMG_WIDTH = 256
-    BATCH_SIZE = 32 
+    BATCH_SIZE = 16 
 
     def __init__(self, num_genres=10):
         super(CNN, self).__init__()
@@ -39,7 +39,7 @@ class CNN(nn.Module):
         self.classifier = nn.Sequential(
             nn.Linear(in_features=flattened_size, out_features=256),
             nn.ReLU(),
-            nn.Dropout(p=0.5), # Dropout for regularization
+            nn.Dropout(p=0.6), # Dropout for regularization
             nn.Linear(in_features=256, out_features=num_genres)
         )
 

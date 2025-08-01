@@ -1,5 +1,6 @@
 import torch
 from torchvision import transforms
+from torchvision.transforms import v2
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import argparse
@@ -86,20 +87,31 @@ def main(args):
         print("Genre list created successfully.")
     except Exception as e:
         print(f"Error creating genre list: {e}")
+        return
 
     try:
         train_set, val_set, test_set = dataset_mgr_instance.create_sets()
         print("Data sets created successfully.")
     except Exception as e:
         print(f"Error creating data sets: {e}")
+        return
 
     try:
         train_transform  = transforms.Compose([
             transforms.Grayscale(num_output_channels=1),
             transforms.Resize((CNN.IMG_HEIGHT, CNN.IMG_WIDTH)),
-            # transforms.RandomHorizontalFlip(p=0.5),  # Randomly flip images horizontally to prevent overfitting
+            # transforms.RandomHorizontalFlip(p=0.5),  # Randomly flip images horizontally to prevent overfitting # Actually removed because A B C is different from C B A
             # transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)), # Randomly translate and scale images
-            transforms.ToTensor()
+            transforms.ToTensor(), # IMPORTANT: Augmentations like masking must be done on Tensors
+
+            # Add Time and Frequency Masking AFTER converting to a tensor
+        #     transforms.RandomApply([
+        #         transforms.v2.RandomErasing(p=1, scale=(0.02, 0.05), ratio=(0.1, 0.3)) # Frequency Masking
+        #     ], p=0.5), # Apply with 50% probability
+            
+        #     transforms.RandomApply([
+        #         transforms.v2.RandomErasing(p=1, scale=(0.02, 0.05), ratio=(3, 10))  # Time Masking
+        #     ], p=0.5)  # Apply with 50% probability
         ])
 
         val_and_test_transform = transforms.Compose([
@@ -110,6 +122,7 @@ def main(args):
         print("Data transform created successfully.")
     except Exception as e:
         print(f"Error creating data transform: {e}")
+        return
 
     try:
         train_dataset = SpectrogramDataset(train_set, genre_to_index, train_transform)
@@ -119,6 +132,7 @@ def main(args):
         print("Spectrogram datasets created successfully.")
     except Exception as e:
         print(f"Error creating spectrogram datasets: {e}")
+        return
 
     try:
         train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
@@ -127,6 +141,26 @@ def main(args):
         print("Data loaders created successfully.")
     except Exception as e:
         print(f"Error creating data loaders: {e}")
+        return
+    
+
+    # try:
+    #     print("\n--- Performing Data Sanity Check ---")
+    #     # Get one batch of data
+    #     images, labels = next(iter(train_dataloader))
+        
+    #     # Check the shape, min, and max values
+    #     print(f"Batch shape: {images.shape}")
+    #     print(f"Min pixel value: {images.min()}")
+    #     print(f"Max pixel value: {images.max()}")
+    #     print("------------------------------------")
+
+    #     # If min and max are the same, your data is uniform and won't train.
+    #     # They should be close to 0.0 and 1.0 respectively.
+        
+    # except Exception as e:
+    #     print(f"FATAL: Error during data sanity check: {e}")
+    #     return
 
     try:
         model = CNN(num_genres=num_genres)
@@ -134,6 +168,7 @@ def main(args):
         print(model)
     except Exception as e:
         print(f"Error creating CNN model: {e}")
+        return
 
     print("All components initialized successfully.")
     print("Starting training...")
@@ -151,6 +186,7 @@ def main(args):
         model.to(device)
     except Exception as e:
         print(f"Error setting up device: {e}")
+        return
 
     try:
         # Loss function
@@ -160,11 +196,12 @@ def main(args):
         # Weight decay is used to prevent overfitting
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
                                      
-        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=3, verbose=True)
+        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=3)
 
         print("Loss function and optimizer set up successfully.")
     except Exception as e:
         print(f"Error setting up loss function and optimizer: {e}")
+        return
 
     highest_val_acc = 0.0
     model_save_path = "most_precise_cnn.pth"
@@ -185,11 +222,13 @@ def main(args):
                 print(f"Model saved with accuracy: {highest_val_acc:.4f}")
     except Exception as e:
         print(f"Error during training: {e}")
+        return
 
     try:
         test_model(model, test_dataloader, loss_fn, device)
     except Exception as e:
         print(f"Error during testing: {e}")
+        return
 
     print("Training completed successfully.")
 
