@@ -8,3 +8,4 @@ Data/
 *.png
 
 most_precise_cnn.pth
+best_complex_model.pth
