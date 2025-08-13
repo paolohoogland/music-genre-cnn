@@ -41,7 +41,7 @@ def train_one_epoch(model, dataloader, loss_fn, optimizer, device):
     return epoch_loss
 
 def validate_one_epoch(model, dataloader, loss_fn, device):
-    model.train()  
+    model.eval()  
     total_loss = 0.0
     correct_predictions = 0
 
@@ -183,7 +183,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the model')
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate for the optimizer')
-    parser.add_argument('--weight_decay', type=float, default=0.0001, help='Weight decay for the optimizer')
+    parser.add_argument('--weight_decay', type=float, default=1e-4, help='Weight decay for the optimizer')
     parser.add_argument('--batch_size', type=int, default=MLP.BATCH_SIZE, help='Batch size for training and validation')
 
     args = parser.parse_args()
