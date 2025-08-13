@@ -7,22 +7,21 @@ import argparse
 
 from DatasetManager import DatasetManager
 from SpectrogramDataset import SpectrogramDataset
-from CNN import CNN
 
-from ComplexModel import ComplexModel
+from MLP import MLP
 
 def train_one_epoch(model, dataloader, loss_fn, optimizer, device):
     model.train()  
     total_loss = 0.0
 
-    for images, features, labels in dataloader:
-        images, features, labels = images.to(device), features.to(device), labels.to(device)
+    for features, labels in dataloader:
+        features, labels = features.to(device), labels.to(device)
 
         # Zero the gradients because PyTorch accumulates gradients by default
         optimizer.zero_grad()
 
         # Forward pass: compute predicted outputs 
-        outputs = model(images, features)
+        outputs = model(features)
 
         # Compute the loss
         loss = loss_fn(outputs, labels)
@@ -34,7 +33,7 @@ def train_one_epoch(model, dataloader, loss_fn, optimizer, device):
         optimizer.step()
 
         # Accumulate the loss
-        total_loss += loss.item() * images.size(0)
+        total_loss += loss.item() * features.size(0)
 
     # Average the loss over the entire dataset
     epoch_loss = total_loss / len(dataloader.dataset)
@@ -42,31 +41,30 @@ def train_one_epoch(model, dataloader, loss_fn, optimizer, device):
     return epoch_loss
 
 def validate_one_epoch(model, dataloader, loss_fn, device):
-    model.eval()  
+    model.train()  
     total_loss = 0.0
     correct_predictions = 0
 
-    # Disable gradient calculation for memory efficiency
-    with torch.no_grad():
-        for images, features, labels in dataloader:
-            images, features, labels = images.to(device), features.to(device), labels.to(device)
+    for features, labels in dataloader:
+        features, labels = features.to(device), labels.to(device)
 
-            # Forward pass: compute predicted outputs 
-            outputs = model(images, features)
+        # Forward pass: compute predicted outputs 
+        outputs = model(features)
 
-            # Compute the loss
-            loss = loss_fn(outputs, labels)
-            total_loss += loss.item() * images.size(0)
+        # Compute the loss
+        loss = loss_fn(outputs, labels)
 
-            # Accumulate the loss
-            _, predicted = torch.max(outputs, 1) # _ : ignore the first return value
-            correct_predictions += (predicted == labels).sum().item()
+        # Accumulate the loss
+        total_loss += loss.item() * features.size(0)
+
+        _, predicted = torch.max(outputs, 1) # _ : ignore the first return value
+        correct_predictions += (predicted == labels).sum().item()
 
     # Average the loss over the entire dataset
     epoch_loss = total_loss / len(dataloader.dataset)
     epoch_accuracy = correct_predictions / len(dataloader.dataset)
-    print(f"Validation loss: {epoch_loss:.4f}")
-    print(f"Validation accuracy: {epoch_accuracy:.4f}")
+    print(f"Training loss: {epoch_loss:.4f}")
+    print(f"Training accuracy: {epoch_accuracy:.4f}")
     return epoch_loss, epoch_accuracy
 
 def test_model(model_path, model, dataloader, loss_fn, device):
@@ -78,6 +76,7 @@ def test_model(model_path, model, dataloader, loss_fn, device):
     print(f"Final Test Loss: {test_loss:.4f}")
 
 def main(args):
+    torch.manual_seed(42)  # For reproducibility
     dataset_mgr_instance = DatasetManager()
 
     try:
@@ -104,31 +103,9 @@ def main(args):
     imagenet_std = [0.229, 0.224, 0.225]
 
     try:
-        train_transform  = transforms.Compose([
-            transforms.Lambda(lambda img: img.convert("RGB")),  
-            transforms.Resize((CNN.IMG_HEIGHT, CNN.IMG_WIDTH)),
-            transforms.ToTensor(),
-            v2.RandomErasing(p=0.5, scale=(0.02, 0.04), ratio=(0.1, 0.5), value=0),
-            v2.RandomErasing(p=0.5, scale=(0.02, 0.04), ratio=(3, 10), value=0),
-            transforms.Normalize(mean=imagenet_mean, std=imagenet_std)
-        ])
-
-        val_and_test_transform = transforms.Compose([
-            transforms.Lambda(lambda img: img.convert("RGB")),  
-            transforms.Resize((CNN.IMG_HEIGHT, CNN.IMG_WIDTH)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=imagenet_mean, std=imagenet_std)
-        ])
-
-        print("Data transform created successfully.")
-    except Exception as e:
-        print(f"Error creating data transform: {e}")
-        return
-
-    try:
-        train_dataset = SpectrogramDataset(train_set, genre_to_index, train_transform)
-        val_dataset = SpectrogramDataset(val_set, genre_to_index, val_and_test_transform)
-        test_dataset = SpectrogramDataset(test_set, genre_to_index, val_and_test_transform)
+        train_dataset = SpectrogramDataset(train_set, genre_to_index, transform=None, model_type='mlp')
+        val_dataset = SpectrogramDataset(val_set, genre_to_index, transform=None, model_type='mlp')
+        test_dataset = SpectrogramDataset(test_set, genre_to_index, transform=None, model_type='mlp')
 
         print("Spectrogram datasets created successfully.")
     except Exception as e:
@@ -144,7 +121,7 @@ def main(args):
         print(f"Error creating data loaders: {e}")
         return
     
-    model = ComplexModel(num_genres=num_genres, num_features=num_features)
+    model = MLP(num_genres=num_genres, num_features=num_features)
 
     try:
         # Device setup using CUDA (GPU) if available, otherwise CPU
@@ -169,8 +146,8 @@ def main(args):
         model_save_path = "best_complex_model.pth"
 
         print("Starting training...")
-        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=args.weight_decay)
-        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=3)
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=5)
     except Exception as e:
         print(f"Error setting up optimizer/scheduler: {e}")
         return
@@ -204,10 +181,10 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a CNN for Music Genre Classification")
 
-    parser.add_argument('--epochs', type=int, default=50, help='Number of epochs to train the model')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the model')
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate for the optimizer')
     parser.add_argument('--weight_decay', type=float, default=0.0001, help='Weight decay for the optimizer')
-    parser.add_argument('--batch_size', type=int, default=CNN.BATCH_SIZE, help='Batch size for training and validation')
+    parser.add_argument('--batch_size', type=int, default=MLP.BATCH_SIZE, help='Batch size for training and validation')
 
     args = parser.parse_args()
     main(args)
