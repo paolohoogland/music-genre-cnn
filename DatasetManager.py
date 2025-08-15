@@ -5,73 +5,65 @@ import pandas as pd
 import re
 
 class DatasetManager:
-    IMAGES_PATH = 'Data/images_original'
-    FEATURES_PATH = 'Data/features_30_sec.csv'
+    LONG_FEATURES_PATH = 'Data/features_30_sec.csv'
+    SHORT_FEATURES_PATH = 'Data/features_3_sec.csv'
 
     def __init__(self):
         # This list will hold (image_path, numeric_features, genre_name)
-        self.features_af = self._load_features()
+        self.long_features_af = self._load_features(self.LONG_FEATURES_PATH)
+        self.short_features_af = self._load_features(self.SHORT_FEATURES_PATH)
 
         # Normalize features
-        self.features_af = (self.features_af - self.features_af.mean()) / self.features_af.std()  
+        epsilon = 1e-6
 
-    def _load_features(self): 
+        self.long_features_af = (self.long_features_af - self.long_features_af.mean()) / (self.long_features_af.std() + epsilon)
+        self.short_features_af = (self.short_features_af - self.short_features_af.mean()) / (self.short_features_af.std() + epsilon)
+
+    def _load_features(self, path):
         # af = audio features, 30 seconds snippet
-        af = pd.read_csv(self.FEATURES_PATH)
+        af = pd.read_csv(path)
 
-        # Drop unnecessary columns
-        af = af.drop(columns=['length', 'label']) 
+        af = af.drop(columns=['label'])
         af = af.set_index('filename')
+
         return af
     
     def get_all_data_files(self):
         all_data_with_features =[]
 
-        # Get all music genres in the dataset
-        genre_dirs = [d for d in os.listdir(self.IMAGES_PATH) if os.path.isdir(os.path.join(self.IMAGES_PATH, d))]
+        # Regex patterns
+        long_pattern = re.compile(r"([a-zA-Z]+)\.\d{5}\.wav$")
+        short_pattern = re.compile(r"([a-zA-Z]+)\.\d{5}\.\d+\.wav$")
 
-        # Regex to match the filename pattern
-        # Example: 'pop.00056.wav'
-        filename_pattern = re.compile(r"([a-zA-Z]+)(\d{5})")
+        # Process long (30 sec) files
+        for fname, features in self.long_features_af.iterrows():
+            match = long_pattern.match(fname)
+            if match:
+                genre = match.group(1)
+                all_data_with_features.append((fname, features.values, genre))
 
-        for genre in genre_dirs:
-            genre_path = os.path.join(self.IMAGES_PATH, genre)
-            image_files = os.listdir(genre_path)
-
-            # Create a CSV filename for each image file
-            # This is because there's less image files than numeric features
-            for image_file in image_files:
-                if image_file.lower().endswith(('.png')):
-                    full_image_path = os.path.join(genre_path, image_file)
-                    base_name = os.path.splitext(image_file)[0]
-                    match = filename_pattern.match(base_name)
-
-                    if match:
-                        genre_part = match.group(1)  # 'pop'
-                        number_part = match.group(2) # '00056'
-                        
-                        # This creates 'pop.00056.wav'
-                        csv_filename = f"{genre_part}.{number_part}.wav"
-
-                    if csv_filename in self.features_af.index:
-                        numeric_features = self.features_af.loc[csv_filename].values
-                        all_data_with_features.append((full_image_path, numeric_features, genre)) 
+        # Process short (3 sec) files
+        for fname, features in self.short_features_af.iterrows():
+            match = short_pattern.match(fname)
+            if match:
+                genre = match.group(1)
+                all_data_with_features.append((fname, features.values, genre))
 
         return all_data_with_features
     
     def get_genre_list(self):
-        genre_dirs = [d for d in os.listdir(self.IMAGES_PATH) 
-                      if os.path.isdir(os.path.join(self.IMAGES_PATH, d)) and not d.startswith('.')]
-        
-        return sorted(genre_dirs)
+        genres = set(self.long_features_af.index.str.split('.').str[0])
+        return sorted(genres)
 
     def create_sets(self):
         all_data = self.get_all_data_files()
 
         # Group files by genre
-        files_by_genre = defaultdict(list)
+        files_by_genre = defaultdict(lambda: defaultdict(list))
+
         for path, features, genre in all_data:
-            files_by_genre[genre].append((path, features, genre))
+            base_id = '.'.join(path.split('.')[:2]) 
+            files_by_genre[genre][base_id].append((path, features, genre))
 
         train_set = []
         val_set = []
@@ -80,16 +72,25 @@ class DatasetManager:
         # Fixed seed
         random.seed(42)
 
-        for genre, files in files_by_genre.items():
-            random.shuffle(files)
-            
-            num_files_in_genre = len(files)
-            train_end = int(0.7 * num_files_in_genre)
-            val_end = train_end + int(0.15 * num_files_in_genre)
+        for genre, songs_dict in files_by_genre.items():
+            song_ids = list(songs_dict.keys())
+            random.shuffle(song_ids)
 
-            train_set.extend(files[:train_end])
-            val_set.extend(files[train_end:val_end])
-            test_set.extend(files[val_end:])
+            num_songs = len(song_ids)
+            train_end = int(0.7 * num_songs)
+            val_end = train_end + int(0.15 * num_songs)
+
+            train_ids = song_ids[:train_end]
+            val_ids = song_ids[train_end:val_end]
+            test_ids = song_ids[val_end:]
+
+            # Add all chunks from the same song into the same set
+            for sid in train_ids:
+                train_set.extend(songs_dict[sid])
+            for sid in val_ids:
+                val_set.extend(songs_dict[sid])
+            for sid in test_ids:
+                test_set.extend(songs_dict[sid])
 
         random.shuffle(train_set)
         random.shuffle(val_set)

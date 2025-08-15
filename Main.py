@@ -63,8 +63,8 @@ def validate_one_epoch(model, dataloader, loss_fn, device):
     # Average the loss over the entire dataset
     epoch_loss = total_loss / len(dataloader.dataset)
     epoch_accuracy = correct_predictions / len(dataloader.dataset)
-    print(f"Training loss: {epoch_loss:.4f}")
-    print(f"Training accuracy: {epoch_accuracy:.4f}")
+    print(f"Validation loss: {epoch_loss:.4f}")
+    print(f"Validation accuracy: {epoch_accuracy:.4f}")
     return epoch_loss, epoch_accuracy
 
 def test_model(model_path, model, dataloader, loss_fn, device):
@@ -123,6 +123,11 @@ def main(args):
     
     model = MLP(num_genres=num_genres, num_features=num_features)
 
+    print("\n" + "="*40)
+    print("INITIALIZING MODEL ARCHITECTURE")
+    print(model)
+    print("="*40 + "\n")
+
     try:
         # Device setup using CUDA (GPU) if available, otherwise CPU
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -144,6 +149,8 @@ def main(args):
     try:
         highest_val_acc = 0.0
         model_save_path = "best_complex_model.pth"
+        patience = 15
+        epochs_without_improvement = 0
 
         print("Starting training...")
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -166,6 +173,14 @@ def main(args):
                 highest_val_acc = val_accuracy
                 torch.save(model.state_dict(), model_save_path)
                 print(f"Model saved with accuracy: {highest_val_acc:.4f}")
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+                print(f"No improvement in validation accuracy for {epochs_without_improvement} epochs.")
+
+            if epochs_without_improvement == patience:
+                print(f"Early stopping triggered after {patience} epochs without improvement.")
+                break
     except Exception as e:
         print(f"Error during training: {e}")
         return
@@ -184,7 +199,7 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the model')
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate for the optimizer')
     parser.add_argument('--weight_decay', type=float, default=1e-4, help='Weight decay for the optimizer')
-    parser.add_argument('--batch_size', type=int, default=MLP.BATCH_SIZE, help='Batch size for training and validation')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training and validation')
 
     args = parser.parse_args()
     main(args)
