@@ -4,55 +4,97 @@ from collections import defaultdict
 import pandas as pd
 import re
 
+from Audio import Audio
+
 class DatasetManager:
-    LONG_FEATURES_PATH = 'Data/features_30_sec.csv'
-    SHORT_FEATURES_PATH = 'Data/features_3_sec.csv'
+    OWN_LONG_FEATURES_PATH = 'Data/own_features_30_sec.csv'
+    # SHORT_FEATURES_PATH = 'Data/own_features_3_sec.csv'
 
     def __init__(self):
-        # This list will hold (image_path, numeric_features, genre_name)
-        self.long_features_af = self._load_features(self.LONG_FEATURES_PATH)
-        self.short_features_af = self._load_features(self.SHORT_FEATURES_PATH)
+        # Initialize variables
+        self.own_long_features = None
+        self.all_genres_list = []
 
-        # Normalize features
-        epsilon = 1e-6
+    def extract_audio_features(self):
+        audio_instance = Audio()
+        audio_path = "./Data/genres_original"
+        all_features_list = []
 
-        self.long_features_af = (self.long_features_af - self.long_features_af.mean()) / (self.long_features_af.std() + epsilon)
-        self.short_features_af = (self.short_features_af - self.short_features_af.mean()) / (self.short_features_af.std() + epsilon)
+        print("Starting audio feature extraction...")
+
+        try:
+            for root, dirs, files in os.walk(audio_path):
+                for filename in files:
+                    if filename.endswith('.wav'):
+                        file_path = os.path.join(root, filename)
+                        
+                        y, sr = audio_instance.load_audio(file_path)
+                        
+                        features = {'filename': filename}
+
+                        features['chroma_stft_mean'], features['chroma_stft_var'] = audio_instance.extract_chroma_sftf(y, sr)
+                        features['rms_mean'], features['rms_var'] = audio_instance.extract_rms(y)
+                        features['spectral_centroid_mean'], features['spectral_centroid_var'] = audio_instance.extract_spectral_centroid(y, sr)
+                        features['spectral_bandwidth_mean'], features['spectral_bandwidth_var'] = audio_instance.extract_spectral_bandwith(y, sr)
+                        features['rolloff_mean'], features['rolloff_var'] = audio_instance.extract_rolloff(y, sr)
+                        features['zero_crossing_rate_mean'], features['zero_crossing_rate_var'] = audio_instance.extract_zero_crossing_rate(y)
+                        features['harmony_mean'], features['harmony_var'] = audio_instance.extract_harmony(y, sr)
+                        features['perceptr_mean'], features['perceptr_var'] = audio_instance.extract_perceptr(y, sr)
+                        features['tempo'] = audio_instance.extract_tempo(y, sr)
+
+                        # Loop through the 20 MFCCs
+                        mfcc_means, mfcc_vars = audio_instance.extract_mfccs(y, sr)
+                        for i in range(20):
+                            features[f'mfcc{i+1}_mean'] = mfcc_means[i]
+                            features[f'mfcc{i+1}_var'] = mfcc_vars[i]
+
+                        features['label'] = os.path.basename(root)
+
+                        all_features_list.append(features)
+                        print(f"Successfully processed: {filename}")
+
+                        break
+
+        except Exception as e:
+            print(f"Error processing {file_path}: {e}")
+
+        features_df = pd.DataFrame(all_features_list)
+        print(features_df.head())
+
+        return features_df
+
+    def create_feature_dataset(self):
+        try: 
+            features_df = self.extract_audio_features()
+            features_df.to_csv(self.OWN_LONG_FEATURES_PATH, index=False)
+
+            self.own_long_features = features_df
+            self.all_genres_list = features_df['label'].unique().tolist()
+
+        except Exception as e:
+            print(f"Error processing audio features: {e}")
+
+        print(f"Extracted {len(self.all_genres_list)} unique genres from audio features.")
+
+        print("\n--- Feature Extraction Complete ---")
+        print("Head of the new DataFrame:")
+        print(features_df.head())
+
+    def get_feature_dataset(self):
+        self.own_long_features = self._load_features(self.OWN_LONG_FEATURES_PATH)
+        self.all_genres_list = self.get_genre_list()
 
     def _load_features(self, path):
         # af = audio features, 30 seconds snippet
         af = pd.read_csv(path)
 
-        af = af.drop(columns=['label'])
+        # af = af.drop(columns=['label'])
         af = af.set_index('filename')
 
         return af
     
-    def get_all_data_files(self):
-        all_data_with_features =[]
-
-        # Regex patterns
-        long_pattern = re.compile(r"([a-zA-Z]+)\.\d{5}\.wav$")
-        short_pattern = re.compile(r"([a-zA-Z]+)\.\d{5}\.\d+\.wav$")
-
-        # Process long (30 sec) files
-        for fname, features in self.long_features_af.iterrows():
-            match = long_pattern.match(fname)
-            if match:
-                genre = match.group(1)
-                all_data_with_features.append((fname, features.values, genre))
-
-        # Process short (3 sec) files
-        for fname, features in self.short_features_af.iterrows():
-            match = short_pattern.match(fname)
-            if match:
-                genre = match.group(1)
-                all_data_with_features.append((fname, features.values, genre))
-
-        return all_data_with_features
-    
     def get_genre_list(self):
-        genres = set(self.long_features_af.index.str.split('.').str[0])
+        genres = set(self.own_long_features.index.str.split('.').str[0])
         return sorted(genres)
 
     def create_sets(self):

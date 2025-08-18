@@ -1,3 +1,6 @@
+import os
+import pandas as pd
+
 import torch
 from torchvision import transforms
 from torchvision.transforms import v2
@@ -7,6 +10,7 @@ import argparse
 
 from DatasetManager import DatasetManager
 from SpectrogramDataset import SpectrogramDataset
+from Audio import Audio
 
 from MLP import MLP
 
@@ -77,129 +81,139 @@ def test_model(model_path, model, dataloader, loss_fn, device):
 
 def main(args):
     torch.manual_seed(42)  # For reproducibility
+
     dataset_mgr_instance = DatasetManager()
 
+    if args.feature_dataset_creation:
+        dataset_mgr_instance.create_feature_dataset()
+    else:
+        dataset_mgr_instance.get_feature_dataset()
+
     try:
-        all_genres = dataset_mgr_instance.get_genre_list()
+        all_genres = dataset_mgr_instance.all_genres_list
         num_genres = len(all_genres)
         genre_to_index = {genre: i for i, genre in enumerate(all_genres)}
 
         print("Genre list created successfully.")
+        print(f"Number of genres: {num_genres}")
+        print(f"Genre to index mapping: {genre_to_index}")
     except Exception as e:
         print(f"Error creating genre list: {e}")
         return
 
-    try:
-        train_set, val_set, test_set = dataset_mgr_instance.create_sets()
-        num_features = len(train_set[0][1])
+    # try:
+    #     train_set, val_set, test_set = dataset_mgr_instance.create_sets()
+    #     num_features = len(train_set[0][1])
 
-        print("Data sets created successfully.")
-    except Exception as e:
-        print(f"Error creating data sets: {e}")
-        return
+    #     print("Data sets created successfully.")
+    # except Exception as e:
+    #     print(f"Error creating data sets: {e}")
+    #     return
 
-    # imagenet mean and std used for normalization
-    imagenet_mean = [0.485, 0.456, 0.406]
-    imagenet_std = [0.229, 0.224, 0.225]
+    # # imagenet mean and std used for normalization
+    # imagenet_mean = [0.485, 0.456, 0.406]
+    # imagenet_std = [0.229, 0.224, 0.225]
 
-    try:
-        train_dataset = SpectrogramDataset(train_set, genre_to_index, transform=None, model_type='mlp')
-        val_dataset = SpectrogramDataset(val_set, genre_to_index, transform=None, model_type='mlp')
-        test_dataset = SpectrogramDataset(test_set, genre_to_index, transform=None, model_type='mlp')
+    # try:
+    #     train_dataset = SpectrogramDataset(train_set, genre_to_index, transform=None, model_type='mlp')
+    #     val_dataset = SpectrogramDataset(val_set, genre_to_index, transform=None, model_type='mlp')
+    #     test_dataset = SpectrogramDataset(test_set, genre_to_index, transform=None, model_type='mlp')
 
-        print("Spectrogram datasets created successfully.")
-    except Exception as e:
-        print(f"Error creating spectrogram datasets: {e}")
-        return
+    #     print("Spectrogram datasets created successfully.")
+    # except Exception as e:
+    #     print(f"Error creating spectrogram datasets: {e}")
+    #     return
 
-    try:
-        train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-        val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
-        test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
-        print("Data loaders created successfully.")
-    except Exception as e:
-        print(f"Error creating data loaders: {e}")
-        return
+    # try:
+    #     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    #     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
+    #     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
+    #     print("Data loaders created successfully.")
+    # except Exception as e:
+    #     print(f"Error creating data loaders: {e}")
+    #     return
     
-    model = MLP(num_genres=num_genres, num_features=num_features)
+    # model = MLP(num_genres=num_genres, num_features=num_features)
 
-    print("\n" + "="*40)
-    print("INITIALIZING MODEL ARCHITECTURE")
-    print(model)
-    print("="*40 + "\n")
+    # print("\n" + "="*40)
+    # print("INITIALIZING MODEL ARCHITECTURE")
+    # print(model)
+    # print("="*40 + "\n")
 
-    try:
-        # Device setup using CUDA (GPU) if available, otherwise CPU
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"Using device: {device}")
-        model.to(device)
-    except Exception as e:
-        print(f"Error setting up device: {e}")
-        return
+    # try:
+    #     # Device setup using CUDA (GPU) if available, otherwise CPU
+    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #     print(f"Using device: {device}")
+    #     model.to(device)
+    # except Exception as e:
+    #     print(f"Error setting up device: {e}")
+    #     return
 
-    try:
-        # Loss function
-        loss_fn = torch.nn.CrossEntropyLoss()
+    # try:
+    #     # Loss function
+    #     loss_fn = torch.nn.CrossEntropyLoss()
 
-        print("Loss function and optimizer set up successfully.")
-    except Exception as e:
-        print(f"Error setting up loss function and optimizer: {e}")
-        return
+    #     print("Loss function and optimizer set up successfully.")
+    # except Exception as e:
+    #     print(f"Error setting up loss function and optimizer: {e}")
+    #     return
 
-    try:
-        highest_val_acc = 0.0
-        model_save_path = "best_complex_model.pth"
-        patience = 15
-        epochs_without_improvement = 0
+    # try:
+    #     highest_val_acc = 0.0
+    #     model_save_path = "best_complex_model.pth"
+    #     patience = 15
+    #     epochs_without_improvement = 0
 
-        print("Starting training...")
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=5)
-    except Exception as e:
-        print(f"Error setting up optimizer/scheduler: {e}")
-        return
+    #     print("Starting training...")
+    #     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    #     scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=5)
+    # except Exception as e:
+    #     print(f"Error setting up optimizer/scheduler: {e}")
+    #     return
 
-    try:
-        for epoch in range(args.epochs):
-            print(f"Epoch {epoch + 1}/{args.epochs}")
-            train_loss = train_one_epoch(model, train_dataloader, loss_fn, optimizer, device)
-            val_loss, val_accuracy = validate_one_epoch(model, val_dataloader, loss_fn, device)
+    # try:
+    #     for epoch in range(args.epochs):
+    #         print(f"Epoch {epoch + 1}/{args.epochs}")
+    #         train_loss = train_one_epoch(model, train_dataloader, loss_fn, optimizer, device)
+    #         val_loss, val_accuracy = validate_one_epoch(model, val_dataloader, loss_fn, device)
 
-            print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val Accuracy: {val_accuracy:.4f}")
+    #         print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val Accuracy: {val_accuracy:.4f}")
 
-            scheduler.step(val_accuracy)
+    #         scheduler.step(val_accuracy)
 
-            if val_accuracy > highest_val_acc:
-                highest_val_acc = val_accuracy
-                torch.save(model.state_dict(), model_save_path)
-                print(f"Model saved with accuracy: {highest_val_acc:.4f}")
-                epochs_without_improvement = 0
-            else:
-                epochs_without_improvement += 1
-                print(f"No improvement in validation accuracy for {epochs_without_improvement} epochs.")
+    #         if val_accuracy > highest_val_acc:
+    #             highest_val_acc = val_accuracy
+    #             torch.save(model.state_dict(), model_save_path)
+    #             print(f"Model saved with accuracy: {highest_val_acc:.4f}")
+    #             epochs_without_improvement = 0
+    #         else:
+    #             epochs_without_improvement += 1
+    #             print(f"No improvement in validation accuracy for {epochs_without_improvement} epochs.")
 
-            if epochs_without_improvement == patience:
-                print(f"Early stopping triggered after {patience} epochs without improvement.")
-                break
-    except Exception as e:
-        print(f"Error during training: {e}")
-        return
+    #         if epochs_without_improvement == patience:
+    #             print(f"Early stopping triggered after {patience} epochs without improvement.")
+    #             break
+    # except Exception as e:
+    #     print(f"Error during training: {e}")
+    #     return
     
-    try:
-        test_model(model_save_path, model, test_dataloader, loss_fn, device)
-    except Exception as e:
-        print(f"Error during testing: {e}")
-        return
+    # try:
+    #     test_model(model_save_path, model, test_dataloader, loss_fn, device)
+    # except Exception as e:
+    #     print(f"Error during testing: {e}")
+    #     return
 
-    print("Training completed successfully.")
+    # print("Training completed successfully.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a CNN for Music Genre Classification")
 
-    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the model')
-    parser.add_argument('--lr', type=float, default=0.001, help='Learning rate for the optimizer')
-    parser.add_argument('--weight_decay', type=float, default=1e-4, help='Weight decay for the optimizer')
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training and validation')
+    # parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the model')
+    # parser.add_argument('--lr', type=float, default=0.001, help='Learning rate for the optimizer')
+    # parser.add_argument('--weight_decay', type=float, default=1e-4, help='Weight decay for the optimizer')
+    # parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training and validation')
+
+    parser.add_argument('--feature_dataset_creation', action='store_true', help='Flag to create the feature dataset')
 
     args = parser.parse_args()
     main(args)
