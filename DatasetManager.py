@@ -1,8 +1,9 @@
+from fileinput import filename
 import os
 import random
 from collections import defaultdict
 import pandas as pd
-import re
+import numpy as np
 
 from Audio import Audio
 
@@ -22,12 +23,12 @@ class DatasetManager:
 
         print("Starting audio feature extraction...")
 
-        try:
-            for root, dirs, files in os.walk(audio_path):
-                for filename in files:
-                    if filename.endswith('.wav'):
-                        file_path = os.path.join(root, filename)
-                        
+        for root, dirs, files in os.walk(audio_path):
+            for filename in files:
+                if filename.endswith('.wav'):
+                    file_path = os.path.join(root, filename)
+                    
+                    try: 
                         y, sr = audio_instance.load_audio(file_path)
                         
                         features = {'filename': filename}
@@ -52,11 +53,8 @@ class DatasetManager:
 
                         all_features_list.append(features)
                         print(f"Successfully processed: {filename}")
-
-                        break
-
-        except Exception as e:
-            print(f"Error processing {file_path}: {e}")
+                    except Exception as e:
+                        print(f"Error processing {filename}: {e}")
 
         features_df = pd.DataFrame(all_features_list)
         print(features_df.head())
@@ -64,6 +62,10 @@ class DatasetManager:
         return features_df
 
     def create_feature_dataset(self):
+        # delete existing csv
+        if os.path.exists(self.OWN_LONG_FEATURES_PATH):
+            os.remove(self.OWN_LONG_FEATURES_PATH)
+
         try: 
             features_df = self.extract_audio_features()
             features_df.to_csv(self.OWN_LONG_FEATURES_PATH, index=False)
@@ -81,66 +83,70 @@ class DatasetManager:
         print(features_df.head())
 
     def get_feature_dataset(self):
-        self.own_long_features = self._load_features(self.OWN_LONG_FEATURES_PATH)
-        self.all_genres_list = self.get_genre_list()
+        try:
+            df = pd.read_csv(self.OWN_LONG_FEATURES_PATH)
+            self.all_genres_list = self.get_genre_list(df)
+            self.own_long_features = df.set_index('filename')
+        except FileNotFoundError:
+            print(f"File not found: {self.OWN_LONG_FEATURES_PATH}")
+            return
+        except Exception as e:
+            print(f"Error processing audio features: {e}")
+            return
 
-    def _load_features(self, path):
-        # af = audio features, 30 seconds snippet
-        af = pd.read_csv(path)
-
-        # af = af.drop(columns=['label'])
-        af = af.set_index('filename')
-
-        return af
-    
-    def get_genre_list(self):
-        genres = set(self.own_long_features.index.str.split('.').str[0])
-        return sorted(genres)
+    def get_genre_list(self, df):
+        if 'label' in df.columns:
+            genres = df['label'].unique().tolist()
+            return sorted(genres)
+        else:
+            print("Warning: 'label' column not found in DataFrame.")
+            return []
 
     def create_sets(self):
-        all_data = self.get_all_data_files()
+        if self.own_long_features is None:
+            print("Error: Feature dataset is not loaded. Please call get_feature_dataset() first.")
+            return [], [], []
+        
+        labels = self.own_long_features['label']
+        features = self.own_long_features.select_dtypes(include=[np.number])
 
-        # Group files by genre
-        files_by_genre = defaultdict(lambda: defaultdict(list))
+        files_by_genre = defaultdict(list)
+        for filename, genre in labels.items():
+            files_by_genre[genre].append(filename)
 
-        for path, features, genre in all_data:
-            base_id = '.'.join(path.split('.')[:2]) 
-            files_by_genre[genre][base_id].append((path, features, genre))
-
-        train_set = []
-        val_set = []
-        test_set = []
+        train_ids = []
+        val_ids = []
+        test_ids = []
         
         # Fixed seed
         random.seed(42)
 
-        for genre, songs_dict in files_by_genre.items():
-            song_ids = list(songs_dict.keys())
-            random.shuffle(song_ids)
+        for genre, filenames in files_by_genre.items():
+            random.shuffle(filenames)
+            num_files = len(filenames)
+            train_end = int(0.7 * num_files)
+            val_end = train_end + int(0.15 * num_files)
 
-            num_songs = len(song_ids)
-            train_end = int(0.7 * num_songs)
-            val_end = train_end + int(0.15 * num_songs)
+            train_ids.extend(filenames[:train_end])
+            val_ids.extend(filenames[train_end:val_end])
+            test_ids.extend(filenames[val_end:])
 
-            train_ids = song_ids[:train_end]
-            val_ids = song_ids[train_end:val_end]
-            test_ids = song_ids[val_end:]
+        # Assembles the triplet dataset
+        def assemble_set(filenames):
+            data_set = []
+            for filename in filenames:
+                path = filename
+                feature_vector = features.loc[filename].values
+                genre_string = labels.loc[filename]
+                data_set.append((path, feature_vector, genre_string))
+            return data_set
 
-            # Add all chunks from the same song into the same set
-            for sid in train_ids:
-                train_set.extend(songs_dict[sid])
-            for sid in val_ids:
-                val_set.extend(songs_dict[sid])
-            for sid in test_ids:
-                test_set.extend(songs_dict[sid])
+        train_set = assemble_set(train_ids)
+        val_set = assemble_set(val_ids)
+        test_set = assemble_set(test_ids)
 
         random.shuffle(train_set)
         random.shuffle(val_set)
         random.shuffle(test_set)
-        
-        print(f"Total spectrograms: {len(all_data)}")
-        print(f"Training set size: {len(train_set)} images")
-        print(f"Validation set size: {len(val_set)} images")
-        print(f"Test set size: {len(test_set)} images")
 
         return train_set, val_set, test_set
