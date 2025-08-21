@@ -85,7 +85,7 @@ class Audio:
         return np.mean(percussive_data), np.var(percussive_data)
     
     def extract_tempo(self, y, sr):
-        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+        tempo = librosa.beat.beat_track(y=y, sr=sr)[0]
         return tempo
     
     def extract_mfccs(self, y, sr):

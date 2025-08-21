@@ -10,7 +10,6 @@ import argparse
 
 from DatasetManager import DatasetManager
 from SpectrogramDataset import SpectrogramDataset
-from Audio import Audio
 
 from MLP import MLP
 
@@ -84,8 +83,10 @@ def main(args):
 
     dataset_mgr_instance = DatasetManager()
 
+    # Flag allowing creation of the dataset
     if args.feature_dataset_creation:
         dataset_mgr_instance.create_feature_dataset()
+        return
     else:
         dataset_mgr_instance.get_feature_dataset()
 
@@ -97,23 +98,16 @@ def main(args):
         print(f"Error creating genre list: {e}")
         return
 
+    # Create training, validation, and test sets
     try:
         train_set, val_set, test_set = dataset_mgr_instance.create_sets()
         num_features = len(train_set[0][1])
-
         print("Data sets created successfully.")
-        print(f"Number of features: {num_features}")
-        print(f"Number of training samples: {len(train_set)}")
-        print(f"Number of validation samples: {len(val_set)}")
-        print(f"Number of test samples: {len(test_set)}")
     except Exception as e:
         print(f"Error creating data sets: {e}")
         return
 
-    # imagenet mean and std used for normalization
-    imagenet_mean = [0.485, 0.456, 0.406]
-    imagenet_std = [0.229, 0.224, 0.225]
-
+    # Create spectrogram datasets
     try:
         train_dataset = SpectrogramDataset(train_set, genre_to_index, transform=None, model_type='mlp')
         val_dataset = SpectrogramDataset(val_set, genre_to_index, transform=None, model_type='mlp')
@@ -132,9 +126,12 @@ def main(args):
     except Exception as e:
         print(f"Error creating data loaders: {e}")
         return
-    
+
+    # Create an MLP (Multi-Layer Perceptron) 
     model = MLP(num_genres=num_genres, num_features=num_features)
 
+    # Prints the model architecture
+    # We will see every layer, its input shape, and output shape
     print("\n" + "="*40)
     print("INITIALIZING MODEL ARCHITECTURE")
     print(model)
@@ -161,10 +158,13 @@ def main(args):
     try:
         highest_val_acc = 0.0
         model_save_path = "best_complex_model.pth"
-        patience = 15
+        
+        # Patience is used to prevent useless training
+        patience = 20 
         epochs_without_improvement = 0
 
         print("Starting training...")
+        
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=5)
     except Exception as e:
@@ -209,8 +209,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a CNN for Music Genre Classification")
 
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the model')
-    parser.add_argument('--lr', type=float, default=0.001, help='Learning rate for the optimizer')
-    parser.add_argument('--weight_decay', type=float, default=1e-4, help='Weight decay for the optimizer')
+    parser.add_argument('--lr', type=float, default=0.0005, help='Learning rate for the optimizer')
+    parser.add_argument('--weight_decay', type=float, default=5e-4, help='Weight decay for the optimizer')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training and validation')
 
     parser.add_argument('--feature_dataset_creation', action='store_true', help='Flag to create the feature dataset')

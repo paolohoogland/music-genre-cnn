@@ -4,6 +4,7 @@ import random
 from collections import defaultdict
 import pandas as pd
 import numpy as np
+from sklearn.preprocessing import StandardScaler
 
 from Audio import Audio
 
@@ -15,6 +16,16 @@ class DatasetManager:
         # Initialize variables
         self.own_long_features = None
         self.all_genres_list = []
+
+    def load_features(self, path):
+        af = pd.read_csv(path)
+        # Get the genres list before dropping the label column
+        self.all_genres_list = sorted(af['label'].unique().tolist())
+        af = af.drop(columns=['label'])
+
+        # Set the filename as index : allows easy access to rows by filename
+        af = af.set_index('filename')
+        return af
 
     def extract_audio_features(self):
         audio_instance = Audio()
@@ -61,26 +72,25 @@ class DatasetManager:
 
         return features_df
 
-    def create_feature_dataset(self):
-        # delete existing csv
-        if os.path.exists(self.OWN_LONG_FEATURES_PATH):
-            os.remove(self.OWN_LONG_FEATURES_PATH)
+    # def create_feature_dataset(self):
+    #     # delete existing csv
+    #     if os.path.exists(self.OWN_LONG_FEATURES_PATH):
+    #         os.remove(self.OWN_LONG_FEATURES_PATH)
 
-        try: 
-            features_df = self.extract_audio_features()
-            features_df.to_csv(self.OWN_LONG_FEATURES_PATH, index=False)
+    #     try: 
+    #         features_df = self.extract_audio_features()
+    #         features_df.to_csv(self.OWN_LONG_FEATURES_PATH, index=False)
 
-            self.own_long_features = features_df
-            self.all_genres_list = features_df['label'].unique().tolist()
+    #         self.all_genres_list = features_df['label'].unique().tolist()
 
-        except Exception as e:
-            print(f"Error processing audio features: {e}")
+    #     except Exception as e:
+    #         print(f"Error processing audio features: {e}")
 
-        print(f"Extracted {len(self.all_genres_list)} unique genres from audio features.")
+    #     print(f"Extracted {len(self.all_genres_list)} unique genres from audio features.")
 
-        print("\n--- Feature Extraction Complete ---")
-        print("Head of the new DataFrame:")
-        print(features_df.head())
+    #     print("\n--- Feature Extraction Complete ---")
+    #     print("Head of the new DataFrame:")
+    #     print(features_df.head())
 
     def get_feature_dataset(self):
         try:
@@ -121,6 +131,7 @@ class DatasetManager:
         # Fixed seed
         random.seed(42)
 
+        # Split the files into train, validation, and test sets
         for genre, filenames in files_by_genre.items():
             random.shuffle(filenames)
             num_files = len(filenames)
@@ -131,19 +142,38 @@ class DatasetManager:
             val_ids.extend(filenames[train_end:val_end])
             test_ids.extend(filenames[val_end:])
 
+        # Create DataFrames for each set, df being the features
+        X_train_df = features.loc[train_ids]
+        X_val_df = features.loc[val_ids]
+        X_test_df = features.loc[test_ids]
+
+        # Feature scaling for more effective training
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train_df)
+        X_val_scaled = scaler.transform(X_val_df)
+        X_test_scaled = scaler.transform(X_test_df)
+        
+        X_train_scaled_df = pd.DataFrame(X_train_scaled, index=X_train_df.index, columns=X_train_df.columns)
+        X_val_scaled_df = pd.DataFrame(X_val_scaled, index=X_val_df.index, columns=X_val_df.columns)
+        X_test_scaled_df = pd.DataFrame(X_test_scaled, index=X_test_df.index, columns=X_test_df.columns)
+
+        # Data augmentation
+        noise_level = 0.1
+        noise = np.random.randn(*X_train_scaled_df.shape) * noise_level
+        X_train_augmented_df = X_train_scaled_df + noise
+
         # Assembles the triplet dataset
-        def assemble_set(filenames):
+        def assemble_set(scaled_features_df):
             data_set = []
-            for filename in filenames:
+            for filename, feature_vector in scaled_features_df.iterrows():
                 path = filename
-                feature_vector = features.loc[filename].values
                 genre_string = labels.loc[filename]
-                data_set.append((path, feature_vector, genre_string))
+                data_set.append((path, feature_vector.values, genre_string))
             return data_set
 
-        train_set = assemble_set(train_ids)
-        val_set = assemble_set(val_ids)
-        test_set = assemble_set(test_ids)
+        train_set = assemble_set(X_train_augmented_df)
+        val_set = assemble_set(X_val_scaled_df)
+        test_set = assemble_set(X_test_scaled_df)
 
         random.shuffle(train_set)
         random.shuffle(val_set)
