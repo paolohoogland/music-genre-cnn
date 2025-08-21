@@ -4,7 +4,6 @@ import librosa.display
 import matplotlib.pyplot as plt
 
 class Audio:
-
     def load_audio(self, file_name):
         # Read-only mode
         y, sr = librosa.load(file_name, sr=None, mono=True)
@@ -52,3 +51,43 @@ class Audio:
         fig.savefig(filename, dpi=100, pad_inches=0)
         plt.close(fig)
         return filename
+    
+    def extract_rms(self, y):
+        rms_frames = librosa.feature.rms(y=y, frame_length=2048, hop_length=512)[0] # Convert to a 1D array
+        return np.mean(rms_frames), np.var(rms_frames) # Return mean and variance of RMS energy
+    
+    def extract_spectral_centroid(self, y, sr):
+        spectral_centroid_frames = librosa.feature.spectral_centroid(y=y, sr=sr, n_fft=2048, hop_length=512)[0]
+        return np.mean(spectral_centroid_frames), np.var(spectral_centroid_frames)
+    
+    def extract_chroma_sftf(self, y, sr):
+        chroma_rep = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=2048, hop_length=512)
+        return np.mean(chroma_rep), np.var(chroma_rep)
+
+    def extract_spectral_bandwith(self, y, sr):
+        spectral_bandwidth_frames = librosa.feature.spectral_bandwidth(y=y, sr=sr, n_fft=2048, hop_length=512)[0]
+        return np.mean(spectral_bandwidth_frames), np.var(spectral_bandwidth_frames)
+    
+    def extract_rolloff(self, y, sr):
+        spectral_rolloff_frames = librosa.feature.spectral_rolloff(y=y, sr=sr, n_fft=2048, hop_length=512)[0] # roll_percent=0.85
+        return np.mean(spectral_rolloff_frames), np.var(spectral_rolloff_frames)    
+    
+    def extract_zero_crossing_rate(self, y):
+        zero_crossing_rate_frames = librosa.feature.zero_crossing_rate(y=y, frame_length=2048, hop_length=512)[0]
+        return np.mean(zero_crossing_rate_frames), np.var(zero_crossing_rate_frames)
+    
+    def extract_harmony(self, y, sr): # differs from the GTZAN dataset (harmony mean)
+        harmony_frames = librosa.effects.harmonic(y=y)
+        return np.mean(harmony_frames), np.var(harmony_frames)
+    
+    def extract_perceptr(self, y, sr): # differs from the GTZAN dataset (perceptr mean)
+        percussive_data = librosa.effects.percussive(y=y)
+        return np.mean(percussive_data), np.var(percussive_data)
+    
+    def extract_tempo(self, y, sr):
+        tempo = librosa.beat.beat_track(y=y, sr=sr)[0]
+        return tempo
+    
+    def extract_mfccs(self, y, sr):
+        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=20, n_fft=2048, hop_length=512)
+        return np.mean(mfccs, axis=1), np.var(mfccs, axis=1)
