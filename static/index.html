@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Genre Classifier</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f7f7f7;
+            color: #333;
+        }
+        .container {
+            text-align: center;
+            background: white;
+            padding: 40px 50px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 500px;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 2em;
+        }
+        p {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .upload-btn {
+            display: inline-block;
+            padding: 12px 25px;
+            background-color: lightgrey;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s;
+        }
+        .upload-btn:hover {
+            background-color: #0056b3;
+        }
+        #status-message {
+            margin-top: 20px;
+            height: 20px;
+            font-style: italic;
+            color: #555;
+        }
+        #results-area {
+            margin-top: 20px;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+            text-align: left;
+        }
+        #results-area.visible {
+            opacity: 1;
+        }
+        #main-prediction {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #28a745;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #details-toggle {
+            cursor: pointer;
+            color: #007bff;
+            text-decoration: underline;
+            margin-bottom: 10px;
+            display: block;
+            text-align: center;
+        }
+        #confidence-details {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 0 20px;
+        }
+        #confidence-details.visible {
+            max-height: 500px;
+            padding: 15px 20px;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        li {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        li:last-child {
+            border-bottom: none;
+        }
+        .genre-name {
+            font-weight: 500;
+        }
+        .genre-score {
+            font-family: monospace;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Music Genre Classifier</h1>
+    <p>Upload a .wav audio file and the model will predict its genre.</p>
+
+    <input type="file" id="audio-file-input" accept=".wav" />
+    <label for="audio-file-input" class="upload-btn">
+        Upload Audio File
+    </label>
+
+    <div id="status-message"></div>
+
+    <div id="results-area">
+        <div id="main-prediction"></div>
+        <a id="details-toggle">View All Confidence Scores</a>
+        <div id="confidence-details">
+            <ul id="confidence-list"></ul>
+        </div>
+    </div>
+</div>
+
+<script>
+    const audioInput = document.getElementById('audio-file-input');
+    const statusMessage = document.getElementById('status-message');
+    const resultsArea = document.getElementById('results-area');
+    const mainPrediction = document.getElementById('main-prediction');
+    const detailsToggle = document.getElementById('details-toggle');
+    const confidenceDetails = document.getElementById('confidence-details');
+    const confidenceList = document.getElementById('confidence-list');
+
+    detailsToggle.addEventListener('click', () => {
+        confidenceDetails.classList.toggle('visible');
+    });
+    
+    async function handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) {
+            return;
+        }
+
+        // Reset and update UI
+        statusMessage.textContent = 'Uploading and classifying...';
+        resultsArea.classList.remove('visible'); // Hide old results
+        confidenceDetails.classList.remove('visible'); // Ensure details are closed
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Make the API request
+        try {
+            const response = await fetch('http://127.0.0.1:8000/classify/', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Populate the results
+                const predictedGenre = data.predicted_genre;
+                const scores = data.confidence_scores;
+                const topScore = scores[predictedGenre.toLowerCase()];
+
+                // Display the main prediction with its percentage
+                mainPrediction.innerHTML = `Predicted Genre: ${predictedGenre} <br>(${topScore.toFixed(2)}%)`;
+                
+                // Clear any previous list items
+                confidenceList.innerHTML = ''; 
+
+                // Sort scores from highest to lowest for display
+                const sortedScores = Object.entries(scores).sort(([,a],[,b]) => b-a);
+                
+                // Dynamically create the list of all percentages
+                for (const [genre, score] of sortedScores) {
+                    const listItem = document.createElement('li');
+                    listItem.innerHTML = `<span class="genre-name">${genre.charAt(0).toUpperCase() + genre.slice(1)}</span> <span class="genre-score">${score.toFixed(2)}%</span>`;
+                    confidenceList.appendChild(listItem);
+                }
+                
+                statusMessage.textContent = 'Classification successful!';
+                resultsArea.classList.add('visible'); // Show the results area with a fade-in effect
+
+            } else {
+                const errorData = await response.json();
+                statusMessage.textContent = `Error: ${errorData.detail || 'Classification failed.'}`;
+            }
+        } catch (error) {
+            console.error('Network Error:', error);
+            statusMessage.textContent = 'A network error occurred. Is the server running?';
+        } finally {
+            audioInput.value = '';
+        }
+    }
+
+    audioInput.addEventListener('change', handleFileSelect);
+</script>
+
+</body>
+</html>
