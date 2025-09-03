@@ -35,97 +35,75 @@
         input[type="file"] {
             display: none;
         }
-        .upload-btn {
+        .button-container {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .upload-btn, .record-btn {
             display: inline-block;
             padding: 12px 25px;
-            background-color: lightgrey;
-            color: white;
+            color: #333;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
             border-radius: 6px;
             cursor: pointer;
             font-size: 1em;
-            transition: background-color 0.2s;
-        }
-        .upload-btn:hover {
-            background-color: #0056b3;
-        }
-        #status-message {
-            margin-top: 20px;
-            height: 20px;
-            font-style: italic;
-            color: #555;
-        }
-        #results-area {
-            margin-top: 20px;
-            opacity: 0;
-            transition: opacity 0.5s ease-in-out;
-            text-align: left;
-        }
-        #results-area.visible {
-            opacity: 1;
-        }
-        #main-prediction {
-            font-size: 1.5em;
-            font-weight: bold;
-            color: #28a745;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        #details-toggle {
-            cursor: pointer;
-            color: #007bff;
-            text-decoration: underline;
-            margin-bottom: 10px;
-            display: block;
-            text-align: center;
-        }
-        #confidence-details {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.5s ease;
-            background-color: #f9f9f9;
-            border-radius: 8px;
-            padding: 0 20px;
-        }
-        #confidence-details.visible {
-            max-height: 500px;
-            padding: 15px 20px;
-        }
-        ul {
-            list-style-type: none;
-            padding: 0;
-            margin: 0;
-        }
-        li {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #eee;
-        }
-        li:last-child {
-            border-bottom: none;
-        }
-        .genre-name {
             font-weight: 500;
+            transition: background-color 0.2s, border-color 0.2s;
         }
-        .genre-score {
-            font-family: monospace;
-            color: #555;
+        .upload-btn:hover, .record-btn:hover {
+            background-color: #e0e0e0;
+            border-color: #bbb;
         }
+        .record-btn.recording {
+            background-color: #dc3545;
+            color: white;
+            border-color: #c82333;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .record-btn:disabled, .upload-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+        }
+        
+        #status-message { margin-top: 20px; height: 20px; font-style: italic; color: #555; }
+        #results-area { margin-top: 20px; opacity: 0; transition: opacity 0.5s ease-in-out; text-align: left; }
+        #results-area.visible { opacity: 1; }
+        #main-prediction { font-size: 1.5em; font-weight: bold; color: #28a745; text-align: center; margin-bottom: 20px; }
+        #details-toggle { cursor: pointer; color: #007bff; text-decoration: underline; margin-bottom: 10px; display: block; text-align: center; }
+        #confidence-details { max-height: 0; overflow: hidden; transition: max-height 0.5s ease; background-color: #f9f9f9; border-radius: 8px; padding: 0 20px; }
+        #confidence-details.visible { max-height: 500px; padding: 15px 20px; }
+        ul { list-style-type: none; padding: 0; margin: 0; }
+        li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+        li:last-child { border-bottom: none; }
+        .genre-name { font-weight: 500; }
+        .genre-score { font-family: monospace; color: #555; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>Music Genre Classifier</h1>
-    <p>Upload a .wav audio file and the model will predict its genre.</p>
+    <p>Upload a .wav file or record 30 seconds of audio to predict its genre.</p>
 
-    <input type="file" id="audio-file-input" accept=".wav" />
-    <label for="audio-file-input" class="upload-btn">
-        Upload Audio File
-    </label>
+    <div class="button-container">
+        <input type="file" id="audio-file-input" accept=".wav" />
+        <label for="audio-file-input" class="upload-btn" id="upload-label">
+            Upload Audio File
+        </label>
+        <button class="record-btn" id="record-btn">Record Audio</button>
+    </div>
 
     <div id="status-message"></div>
-
     <div id="results-area">
         <div id="main-prediction"></div>
         <a id="details-toggle">View All Confidence Scores</a>
@@ -143,59 +121,88 @@
     const detailsToggle = document.getElementById('details-toggle');
     const confidenceDetails = document.getElementById('confidence-details');
     const confidenceList = document.getElementById('confidence-list');
+    
+    const recordBtn = document.getElementById('record-btn');
+    const uploadLabel = document.getElementById('upload-label');
+
+    let mediaRecorder;
+    let audioChunks = [];
+    let countdownInterval;
 
     detailsToggle.addEventListener('click', () => {
         confidenceDetails.classList.toggle('visible');
     });
-    
-    async function handleFileSelect(event) {
+
+    audioInput.addEventListener('change', (event) => {
         const file = event.target.files[0];
-        if (!file) {
+        if (file) {
+            sendAudioToServer(file);
+        }
+    });
+
+    recordBtn.addEventListener('click', async () => {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            statusMessage.textContent = "Error: Recording is not supported by your browser.";
             return;
         }
+        try {
+            statusMessage.textContent = "Requesting microphone access...";
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            startRecording(stream);
+        } catch (error) {
+            console.error("Error accessing microphone:", error);
+            statusMessage.textContent = "Error: Microphone access was denied.";
+        }
+    });
 
-        // Reset and update UI
+    function startRecording(stream) {
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = event => {
+            audioChunks.push(event.data);
+        };
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const audioFile = new File([audioBlob], "recording.wav", { type: 'audio/wav' });
+            stream.getTracks().forEach(track => track.stop());
+            sendAudioToServer(audioFile);
+        };
+
+        recordBtn.disabled = true;
+        uploadLabel.style.pointerEvents = 'none';
+        recordBtn.classList.add('recording');
+        resultsArea.classList.remove('visible');
+        confidenceDetails.classList.remove('visible');
+        let secondsLeft = 30;
+        statusMessage.textContent = `Recording... ${secondsLeft}s left`;
+        countdownInterval = setInterval(() => {
+            secondsLeft--;
+            statusMessage.textContent = `Recording... ${secondsLeft}s left`;
+        }, 1000);
+        mediaRecorder.start();
+        setTimeout(() => {
+            clearInterval(countdownInterval);
+            if (mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                statusMessage.textContent = "Recording finished. Processing...";
+                recordBtn.classList.remove('recording');
+            }
+        }, 30000);
+    }
+
+    async function sendAudioToServer(file) {
         statusMessage.textContent = 'Uploading and classifying...';
-        resultsArea.classList.remove('visible'); // Hide old results
-        confidenceDetails.classList.remove('visible'); // Ensure details are closed
-
+        resultsArea.classList.remove('visible');
         const formData = new FormData();
         formData.append('file', file);
-
-        // Make the API request
         try {
             const response = await fetch('http://127.0.0.1:8000/classify/', {
                 method: 'POST',
                 body: formData,
             });
-
             if (response.ok) {
                 const data = await response.json();
-                
-                // Populate the results
-                const predictedGenre = data.predicted_genre;
-                const scores = data.confidence_scores;
-                const topScore = scores[predictedGenre.toLowerCase()];
-
-                // Display the main prediction with its percentage
-                mainPrediction.innerHTML = `Predicted Genre: ${predictedGenre} <br>(${topScore.toFixed(2)}%)`;
-                
-                // Clear any previous list items
-                confidenceList.innerHTML = ''; 
-
-                // Sort scores from highest to lowest for display
-                const sortedScores = Object.entries(scores).sort(([,a],[,b]) => b-a);
-                
-                // Dynamically create the list of all percentages
-                for (const [genre, score] of sortedScores) {
-                    const listItem = document.createElement('li');
-                    listItem.innerHTML = `<span class="genre-name">${genre.charAt(0).toUpperCase() + genre.slice(1)}</span> <span class="genre-score">${score.toFixed(2)}%</span>`;
-                    confidenceList.appendChild(listItem);
-                }
-                
-                statusMessage.textContent = 'Classification successful!';
-                resultsArea.classList.add('visible'); // Show the results area with a fade-in effect
-
+                displayResults(data);
             } else {
                 const errorData = await response.json();
                 statusMessage.textContent = `Error: ${errorData.detail || 'Classification failed.'}`;
@@ -205,10 +212,29 @@
             statusMessage.textContent = 'A network error occurred. Is the server running?';
         } finally {
             audioInput.value = '';
+            recordBtn.disabled = false;
+            uploadLabel.style.pointerEvents = 'auto';
         }
     }
-
-    audioInput.addEventListener('change', handleFileSelect);
+    
+    function displayResults(data) {
+        const predictedGenre = data.predicted_genre;
+        const scores = data.confidence_scores;
+        const topScore = scores[predictedGenre.toLowerCase()];
+        mainPrediction.innerHTML = `Predicted Genre: ${predictedGenre} <br>(${topScore.toFixed(2)}%)`;
+        
+        confidenceList.innerHTML = ''; 
+        const sortedScores = Object.entries(scores).sort(([,a],[,b]) => b-a);
+        
+        for (const [genre, score] of sortedScores) {
+            const listItem = document.createElement('li');
+            listItem.innerHTML = `<span class="genre-name">${genre.charAt(0).toUpperCase() + genre.slice(1)}</span> <span class="genre-score">${score.toFixed(2)}%</span>`;
+            confidenceList.appendChild(listItem);
+        }
+        
+        statusMessage.textContent = 'Classification successful!';
+        resultsArea.classList.add('visible');
+    }
 </script>
 
 </body>
