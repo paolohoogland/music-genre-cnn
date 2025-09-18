@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 
 import torch
 from torchvision import transforms
@@ -12,6 +13,10 @@ from DatasetManager import DatasetManager
 from SpectrogramDataset import SpectrogramDataset
 
 from MLP import MLP
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
 
 def train_one_epoch(model, dataloader, loss_fn, optimizer, device):
     model.train()  
@@ -78,7 +83,69 @@ def test_model(model_path, model, dataloader, loss_fn, device):
     print(f"Final Test Accuracy: {test_accuracy:.4f}")
     print(f"Final Test Loss: {test_loss:.4f}")
 
+def classify_audio(model_path, audio_file, device):
+    """
+    Loads the trained model and classifies a single audio file.
+    """
+    print("\n" + "="*40)
+    print("INITIALIZING CLASSIFICATION MODE")
+    print("="*40)
+
+    # 1. Initialize the DatasetManager to process the audio file
+    manager = DatasetManager()
+    # We must load the feature dataset to get the genre list for mapping
+    manager.get_feature_dataset() 
+    if manager.all_genres_list is None: return
+
+    # 2. Process the single audio file to get scaled features
+    scaled_features = manager.process_single_audio(audio_file)
+    if scaled_features is None:
+        print("Could not process audio file.")
+        return
+
+    # 3. Load the trained model architecture
+    #    Make sure num_features matches your training setup (e.g., 56 or 57)
+    num_features = scaled_features.shape[1]
+    num_genres = len(manager.all_genres_list)
+    model = MLP(num_genres=num_genres, num_features=num_features)
+    
+    # 4. Load the saved model weights
+    try:
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        model.to(device)
+        model.eval() # Set model to evaluation mode
+        print(f"Model loaded successfully from {model_path}")
+    except FileNotFoundError:
+        print(f"Error: Model file not found at {model_path}. Please train a model first.")
+        return
+        
+    # 5. Make the prediction
+    with torch.no_grad():
+        features_tensor = torch.tensor(scaled_features, dtype=torch.float32).to(device)
+        output = model(features_tensor)
+        
+        # 6. Convert model output to probabilities and get the prediction
+        probabilities = torch.nn.functional.softmax(output, dim=1)
+        predicted_index = torch.argmax(probabilities, dim=1).item()
+
+    # 7. Map the index back to a genre name
+    index_to_genre = {i: genre for i, genre in enumerate(manager.all_genres_list)}
+    predicted_genre = index_to_genre[predicted_index]
+    
+    print("\n--- PREDICTION RESULTS ---")
+    print(f"The predicted genre for '{os.path.basename(audio_file)}' is: {predicted_genre.upper()}")
+    print("\nConfidence Scores:")
+    for i, genre in enumerate(manager.all_genres_list):
+        print(f"- {genre.capitalize()}: {probabilities[0, i].item() * 100:.2f}%")
+
+
 def main(args):
+    if args.classify_file:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model_path = "best_complex_model.pth" # Path to your saved model
+        classify_audio(model_path, args.classify_file, device)
+        return # Exit after classifying
+     
     torch.manual_seed(42)  # For reproducibility
 
     dataset_mgr_instance = DatasetManager()
@@ -198,12 +265,64 @@ def main(args):
         return
     
     try:
+        # This part already exists
         test_model(model_save_path, model, test_dataloader, loss_fn, device)
+
+        # --- ADD THIS NEW SECTION ---
+        print("\nGenerating confusion matrix for the test set...")
+        # We can reuse the variables we already have in this scope
+        plot_confusion_matrix(model, test_dataloader, all_genres, device)
+        # ---
+        
     except Exception as e:
-        print(f"Error during testing: {e}")
+        print(f"Error during testing or plotting: {e}")
         return
 
-    print("Training completed successfully.")
+    print("Training and evaluation completed successfully.")
+
+
+def plot_confusion_matrix(model, dataloader, class_names, device):
+    """
+    Computes and plots the confusion matrix for a given model and dataloader.
+    
+    Args:
+        model (torch.nn.Module): The trained PyTorch model.
+        dataloader (DataLoader): The DataLoader for the test set.
+        class_names (list): A list of the genre names for labeling the axes.
+        device (torch.device): The device to run the model on ('cpu' or 'cuda').
+    """
+    # 1. Get all predictions and true labels from the test set
+    all_preds = []
+    all_labels = []
+
+    model.eval()  # Set the model to evaluation mode
+    with torch.no_grad():
+        for features, labels in dataloader:
+            features = features.to(device)
+            labels = labels.to(device)
+
+            outputs = model(features)
+            _, predicted = torch.max(outputs, 1)
+
+            # Move predictions and labels to CPU and convert to numpy arrays
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    # 2. Compute the confusion matrix using scikit-learn
+    cm = confusion_matrix(all_labels, all_preds)
+
+    # 3. Plot the confusion matrix using seaborn
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=class_names, yticklabels=class_names)
+    
+    plt.title('Confusion Matrix', fontsize=16)
+    plt.ylabel('Actual Genre', fontsize=12)
+    plt.xlabel('Predicted Genre', fontsize=12)
+    plt.xticks(rotation=45, ha='right')
+    plt.yticks(rotation=0)
+    plt.tight_layout() # Adjust layout to make room for labels
+    plt.show()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a CNN for Music Genre Classification")
@@ -214,6 +333,8 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training and validation')
 
     parser.add_argument('--feature_dataset_creation', action='store_true', help='Flag to create the feature dataset')
+    parser.add_argument('--classify_file', type=str, default=None, help='Path to a single .wav file to classify.')
+
 
     args = parser.parse_args()
     main(args)

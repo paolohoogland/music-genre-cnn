@@ -91,3 +91,27 @@ class Audio:
     def extract_mfccs(self, y, sr):
         mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=20, n_fft=2048, hop_length=512)
         return np.mean(mfccs, axis=1), np.var(mfccs, axis=1)
+
+    def extract_tempogram(self, y, sr):
+        """
+        Extracts tempogram features, which describe the rhythmic content of the audio.
+
+        Logic:
+        1. First, an onset strength envelope is calculated, which represents the moments
+        where new notes or beats occur.
+        2. Then, the tempogram is computed from this envelope. The tempogram is a 2D map
+        showing the prevalence of different tempos over time.
+        3. Finally, this complex map is summarized into two numbers: the overall mean
+        (average rhythmic energy) and variance (how much the rhythmic patterns fluctuate).
+        """
+        # Calculate the onset strength envelope
+        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+        
+        # Calculate the tempogram
+        tempogram = librosa.feature.tempogram(onset_envelope=onset_env, sr=sr)
+        
+        # Summarize the tempogram by taking its mean and variance across all tempo bins and time
+        tempogram_mean = np.mean(tempogram)
+        tempogram_var = np.var(tempogram)
+        
+        return tempogram_mean, tempogram_var
