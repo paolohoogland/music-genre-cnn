@@ -34,9 +34,23 @@
               "icon": "lucide-file",
               "title": "Music Genre Classification"
             }
+          },
+          {
+            "id": "e9719a3f6dc44d2b",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Project Setup and Usage.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Project Setup and Usage"
+            }
           }
         ],
-        "currentTab": 1
+        "currentTab": 2
       }
     ],
     "direction": "vertical"
@@ -184,8 +198,9 @@
       "bases:Create new base": false
     }
   },
-  "active": "32053170860a664d",
+  "active": "e9719a3f6dc44d2b",
   "lastOpenFiles": [
+    "Project Setup and Usage.md",
     "03 - Results and Analysis.md",
     "Music Genre Classification.md",
     "04 - Frontend UI.md",
