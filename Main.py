@@ -14,6 +14,10 @@ from SpectrogramDataset import SpectrogramDataset
 
 from MLP import MLP
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
+
 def train_one_epoch(model, dataloader, loss_fn, optimizer, device):
     model.train()  
     total_loss = 0.0
@@ -261,12 +265,64 @@ def main(args):
         return
     
     try:
+        # This part already exists
         test_model(model_save_path, model, test_dataloader, loss_fn, device)
+
+        # --- ADD THIS NEW SECTION ---
+        print("\nGenerating confusion matrix for the test set...")
+        # We can reuse the variables we already have in this scope
+        plot_confusion_matrix(model, test_dataloader, all_genres, device)
+        # ---
+        
     except Exception as e:
-        print(f"Error during testing: {e}")
+        print(f"Error during testing or plotting: {e}")
         return
 
-    print("Training completed successfully.")
+    print("Training and evaluation completed successfully.")
+
+
+def plot_confusion_matrix(model, dataloader, class_names, device):
+    """
+    Computes and plots the confusion matrix for a given model and dataloader.
+    
+    Args:
+        model (torch.nn.Module): The trained PyTorch model.
+        dataloader (DataLoader): The DataLoader for the test set.
+        class_names (list): A list of the genre names for labeling the axes.
+        device (torch.device): The device to run the model on ('cpu' or 'cuda').
+    """
+    # 1. Get all predictions and true labels from the test set
+    all_preds = []
+    all_labels = []
+
+    model.eval()  # Set the model to evaluation mode
+    with torch.no_grad():
+        for features, labels in dataloader:
+            features = features.to(device)
+            labels = labels.to(device)
+
+            outputs = model(features)
+            _, predicted = torch.max(outputs, 1)
+
+            # Move predictions and labels to CPU and convert to numpy arrays
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    # 2. Compute the confusion matrix using scikit-learn
+    cm = confusion_matrix(all_labels, all_preds)
+
+    # 3. Plot the confusion matrix using seaborn
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=class_names, yticklabels=class_names)
+    
+    plt.title('Confusion Matrix', fontsize=16)
+    plt.ylabel('Actual Genre', fontsize=12)
+    plt.xlabel('Predicted Genre', fontsize=12)
+    plt.xticks(rotation=45, ha='right')
+    plt.yticks(rotation=0)
+    plt.tight_layout() # Adjust layout to make room for labels
+    plt.show()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a CNN for Music Genre Classification")
